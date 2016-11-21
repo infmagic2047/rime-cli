@@ -165,12 +165,13 @@ int main()
         }
         int status = RimeProcessKey(session_id, keycode, modifiers);
         if (!status) {
-            continue;
+            printf("null\n");
+        } else {
+            char *outstr = get_output_json(session_id);
+            printf("%s\n", outstr);
+            free(outstr);
         }
-        char *outstr = get_output_json(session_id);
-        printf("%s\n", outstr);
         fflush(stdout);
-        free(outstr);
     }
 
     RimeDestroySession(session_id);
