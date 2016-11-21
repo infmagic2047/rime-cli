@@ -169,6 +169,7 @@ int main()
         }
         char *outstr = get_output_json(session_id);
         printf("%s\n", outstr);
+        fflush(stdout);
         free(outstr);
     }
 
