@@ -160,6 +160,9 @@ int main()
         if (!get_next_key(&keycode, &modifiers)) {
             break;
         }
+        if (!RimeFindSession(session_id)) {
+            session_id = RimeCreateSession();
+        }
         int status = RimeProcessKey(session_id, keycode, modifiers);
         if (!status) {
             continue;
