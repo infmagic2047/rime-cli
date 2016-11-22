@@ -12,7 +12,7 @@ static volatile sig_atomic_t done = 0;
 static void signal_handler(int sig);
 static char *get_xdg_data_home();
 static char *get_user_data_dir();
-static bool get_next_key(int *keycode, int *modifiers);
+static bool get_next_key(int *keysym, int *modifiers);
 static char *get_output_json(RimeSessionId session_id);
 
 static void signal_handler(int sig)
@@ -44,28 +44,28 @@ static char *get_user_data_dir()
     return path;
 }
 
-static bool get_next_key(int *keycode, int *modifiers)
+static bool get_next_key(int *keysym, int *modifiers)
 {
     char str[1024];
     if (!fgets(str, 1024, stdin)) {
         return false;
     }
     json_object *root = json_tokener_parse(str);
-    json_object *keycode_obj;
+    json_object *keysym_obj;
     json_object *modifiers_obj;
     bool ok = true;
-    if (!json_object_object_get_ex(root, "keycode", &keycode_obj) || json_object_get_type(keycode_obj) != json_type_int) {
+    if (!json_object_object_get_ex(root, "keysym", &keysym_obj) || json_object_get_type(keysym_obj) != json_type_int) {
         ok = false;
     }
     if (!json_object_object_get_ex(root, "modifiers", &modifiers_obj) || json_object_get_type(modifiers_obj) != json_type_int) {
         ok = false;
     }
     if (ok) {
-        *keycode = json_object_get_int(keycode_obj);
+        *keysym = json_object_get_int(keysym_obj);
         *modifiers = json_object_get_int(modifiers_obj);
     } else {
         fprintf(stderr, "Invalid json input\n");
-        *keycode = 0;
+        *keysym = 0;
         *modifiers = 0;
     }
     json_object_put(root);
@@ -155,15 +155,15 @@ int main()
     RimeSessionId session_id = RimeCreateSession();
 
     while (!done) {
-        int keycode;
+        int keysym;
         int modifiers;
-        if (!get_next_key(&keycode, &modifiers)) {
+        if (!get_next_key(&keysym, &modifiers)) {
             break;
         }
         if (!RimeFindSession(session_id)) {
             session_id = RimeCreateSession();
         }
-        int status = RimeProcessKey(session_id, keycode, modifiers);
+        int status = RimeProcessKey(session_id, keysym, modifiers);
         if (!status) {
             printf("null\n");
         } else {
