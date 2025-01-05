@@ -13,7 +13,7 @@ static void signal_handler(int sig);
 static char *get_xdg_data_home();
 static char *get_user_data_dir();
 static bool get_next_key(int *keysym, int *modifiers);
-static char *get_output_json(RimeSessionId session_id);
+static char *get_output_json(RimeApi *api, RimeSessionId session_id);
 
 static void signal_handler(int sig)
 {
@@ -72,27 +72,27 @@ static bool get_next_key(int *keysym, int *modifiers)
     return true;
 }
 
-static char *get_output_json(RimeSessionId session_id)
+static char *get_output_json(RimeApi *api, RimeSessionId session_id)
 {
     json_object *root = json_object_new_object();
 
     json_object *commit_json = NULL;
     RIME_STRUCT(RimeCommit, commit);
-    if (RimeGetCommit(session_id, &commit)) {
+    if (api->get_commit(session_id, &commit)) {
         commit_json = json_object_new_object();
         if (commit.text) {
             json_object_object_add(commit_json, "text", json_object_new_string(commit.text));
         } else {
             json_object_object_add(commit_json, "text", NULL);
         }
-        RimeFreeCommit(&commit);
+        api->free_commit(&commit);
     }
     json_object_object_add(root, "commit", commit_json);
 
     json_object *composition_json = NULL;
     json_object *menu_json = NULL;
     RIME_STRUCT(RimeContext, context);
-    if (RimeGetContext(session_id, &context)) {
+    if (api->get_context(session_id, &context)) {
         if (context.composition.preedit) {
             composition_json = json_object_new_object();
             json_object_object_add(composition_json, "preedit", json_object_new_string(context.composition.preedit));
@@ -122,7 +122,7 @@ static char *get_output_json(RimeSessionId session_id)
             }
             json_object_object_add(menu_json, "candidates", candidates_json);
         }
-        RimeFreeContext(&context);
+        api->free_context(&context);
     }
     json_object_object_add(root, "composition", composition_json);
     json_object_object_add(root, "menu", menu_json);
@@ -140,6 +140,24 @@ int main()
     sigaction(SIGINT, &act, NULL);
     sigaction(SIGTERM, &act, NULL);
 
+    RimeApi *api = rime_get_api();
+
+    if (!RIME_API_AVAILABLE(api, setup) ||
+            !RIME_API_AVAILABLE(api, initialize) ||
+            !RIME_API_AVAILABLE(api, finalize) ||
+            !RIME_API_AVAILABLE(api, start_maintenance) ||
+            !RIME_API_AVAILABLE(api, create_session) ||
+            !RIME_API_AVAILABLE(api, destroy_session) ||
+            !RIME_API_AVAILABLE(api, find_session) ||
+            !RIME_API_AVAILABLE(api, process_key) ||
+            !RIME_API_AVAILABLE(api, get_commit) ||
+            !RIME_API_AVAILABLE(api, free_commit) ||
+            !RIME_API_AVAILABLE(api, get_context) ||
+            !RIME_API_AVAILABLE(api, free_context)) {
+        fprintf(stderr, "Incompatible rime API\n");
+        return 1;
+    }
+
     char *user_data_dir = get_user_data_dir();
     RIME_STRUCT(RimeTraits, rime_traits);
     rime_traits.shared_data_dir = RIME_SHARED_DATA_DIR;
@@ -148,11 +166,11 @@ int main()
     rime_traits.distribution_code_name = PROJECT_NAME;
     rime_traits.distribution_version = PROJECT_VERSION;
     rime_traits.app_name = "rime." PROJECT_NAME;
-    RimeSetup(&rime_traits);
-    RimeInitialize(&rime_traits);
+    api->setup(&rime_traits);
+    api->initialize(&rime_traits);
     free(user_data_dir);
-    RimeStartMaintenance(false);
-    RimeSessionId session_id = RimeCreateSession();
+    api->start_maintenance(false);
+    RimeSessionId session_id = api->create_session();
 
     while (!done) {
         int keysym;
@@ -160,21 +178,21 @@ int main()
         if (!get_next_key(&keysym, &modifiers)) {
             break;
         }
-        if (!RimeFindSession(session_id)) {
-            session_id = RimeCreateSession();
+        if (!api->find_session(session_id)) {
+            session_id = api->create_session();
         }
-        int status = RimeProcessKey(session_id, keysym, modifiers);
+        int status = api->process_key(session_id, keysym, modifiers);
         if (!status) {
             printf("null\n");
         } else {
-            char *outstr = get_output_json(session_id);
+            char *outstr = get_output_json(api, session_id);
             printf("%s\n", outstr);
             free(outstr);
         }
         fflush(stdout);
     }
 
-    RimeDestroySession(session_id);
-    RimeFinalize();
+    api->destroy_session(session_id);
+    api->finalize();
     return 0;
 }
